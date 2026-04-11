@@ -21,3 +21,7 @@ client/config.py
 build/
 *.bin
 !client/assets/*.bin
+
+# Python / uv
+.venv/
+.pytest_cache/

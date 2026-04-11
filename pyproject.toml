@@ -1,0 +1,11 @@
+[project]
+name = "list-a-day"
+version = "0.1.0"
+description = "ESP32 MicroPython client for thermal printing daily lists via LAN"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
