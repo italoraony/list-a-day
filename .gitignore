@@ -1,0 +1,23 @@
+# MicroPython
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config with secrets
+client/config.py
+
+# Build artifacts
+build/
+*.bin
+!client/assets/*.bin
