@@ -129,3 +129,209 @@ class TestDesktopCLI:
         assert "--ip" in result.stdout
         assert "--preview" in result.stdout
         assert "--test" in result.stdout
+
+
+class TestFetchDataServer:
+    """Test fetch_data with mocked server responses."""
+
+    def test_fetch_from_server_success(self):
+        from unittest.mock import patch, MagicMock
+        import json
+
+        mock_todos = [{"title": "Server Todo", "done": False}]
+        mock_events = [{"time": "10:00", "title": "Server Event"}]
+
+        def mock_urlopen(req, timeout=None):
+            url = req.full_url if hasattr(req, 'full_url') else str(req)
+            resp = MagicMock()
+            if "/todos" in url:
+                resp.read.return_value = json.dumps(mock_todos).encode()
+            elif "/calendar" in url:
+                resp.read.return_value = json.dumps(mock_events).encode()
+            return resp
+
+        with patch("urllib.request.urlopen", mock_urlopen):
+            todos, events = fetch_data(server_url="http://localhost:8080")
+
+        assert todos == mock_todos
+        assert events == mock_events
+
+    def test_fetch_from_server_partial_failure(self):
+        """If server call raises, should fall back to mock data."""
+        from unittest.mock import patch
+
+        with patch("urllib.request.urlopen", side_effect=Exception("Connection refused")):
+            todos, events = fetch_data(server_url="http://localhost:8080")
+
+        assert todos == MOCK_TODOS
+        assert events == MOCK_EVENTS
+
+
+class TestCmdPrint:
+    """Test cmd_print with mocked printer."""
+
+    def test_cmd_print_preview_mode(self, capsys):
+        args = MagicMock()
+        args.ip = "192.168.1.100"
+        args.port = 9100
+        args.server = None
+        args.header = "TEST HEADER"
+        args.footer = "TEST FOOTER"
+        args.preview = True
+
+        from desktop import cmd_print
+        cmd_print(args)
+
+        captured = capsys.readouterr()
+        assert "TEST HEADER" in captured.out
+        assert "TEST FOOTER" in captured.out
+        assert "TO-DO LIST" in captured.out
+
+    @patch("desktop.PrinterConnection")
+    def test_cmd_print_sends_to_printer(self, mock_printer_cls):
+        mock_printer = MagicMock()
+        mock_printer.print_receipt.return_value = True
+        mock_printer_cls.return_value = mock_printer
+
+        args = MagicMock()
+        args.ip = "192.168.1.100"
+        args.port = 9100
+        args.server = None
+        args.header = "H"
+        args.footer = "F"
+        args.preview = False
+
+        from desktop import cmd_print
+        cmd_print(args)
+
+        mock_printer.print_receipt.assert_called_once()
+        sent_data = mock_printer.print_receipt.call_args[0][0]
+        assert isinstance(sent_data, bytes)
+        assert len(sent_data) > 0
+
+    @patch("desktop.PrinterConnection")
+    def test_cmd_print_failure_exits(self, mock_printer_cls):
+        mock_printer = MagicMock()
+        mock_printer.print_receipt.return_value = False
+        mock_printer_cls.return_value = mock_printer
+
+        args = MagicMock()
+        args.ip = "192.168.1.100"
+        args.port = 9100
+        args.server = None
+        args.header = "H"
+        args.footer = "F"
+        args.preview = False
+
+        from desktop import cmd_print
+        with pytest.raises(SystemExit) as exc_info:
+            cmd_print(args)
+        assert exc_info.value.code == 1
+
+
+class TestCmdTest:
+    """Test cmd_test with mocked printer."""
+
+    @patch("desktop.PrinterConnection")
+    def test_cmd_test_success(self, mock_printer_cls):
+        mock_printer = MagicMock()
+        mock_printer.test_connection.return_value = True
+        mock_printer.print_receipt.return_value = True
+        mock_printer_cls.return_value = mock_printer
+
+        args = MagicMock()
+        args.ip = "192.168.1.100"
+        args.port = 9100
+
+        from desktop import cmd_test
+        cmd_test(args)
+
+        mock_printer.test_connection.assert_called_once()
+        mock_printer.print_receipt.assert_called_once()
+        sent_data = mock_printer.print_receipt.call_args[0][0]
+        assert b"LIST-A-DAY" in sent_data
+        assert b"Desktop test print" in sent_data
+
+    @patch("desktop.PrinterConnection")
+    def test_cmd_test_unreachable_exits(self, mock_printer_cls):
+        mock_printer = MagicMock()
+        mock_printer.test_connection.return_value = False
+        mock_printer_cls.return_value = mock_printer
+
+        args = MagicMock()
+        args.ip = "192.168.1.100"
+        args.port = 9100
+
+        from desktop import cmd_test
+        with pytest.raises(SystemExit) as exc_info:
+            cmd_test(args)
+        assert exc_info.value.code == 1
+
+    @patch("desktop.PrinterConnection")
+    def test_cmd_test_send_failure_exits(self, mock_printer_cls):
+        mock_printer = MagicMock()
+        mock_printer.test_connection.return_value = True
+        mock_printer.print_receipt.return_value = False
+        mock_printer_cls.return_value = mock_printer
+
+        args = MagicMock()
+        args.ip = "192.168.1.100"
+        args.port = 9100
+
+        from desktop import cmd_test
+        with pytest.raises(SystemExit) as exc_info:
+            cmd_test(args)
+        assert exc_info.value.code == 1
+
+
+class TestDesktopCLIArgs:
+    """Test CLI argument parsing via subprocess."""
+
+    def test_custom_header_footer(self):
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, "-m", "desktop", "--preview",
+             "--header", "CUSTOM HEADER", "--footer", "CUSTOM FOOTER"],
+            capture_output=True,
+            text=True,
+            cwd=os.path.join(os.path.dirname(__file__), ".."),
+        )
+        assert result.returncode == 0
+        assert "CUSTOM HEADER" in result.stdout
+        assert "CUSTOM FOOTER" in result.stdout
+
+    def test_default_ip_env_var(self):
+        import subprocess
+        env = os.environ.copy()
+        env["PRINTER_IP"] = "10.0.0.99"
+        result = subprocess.run(
+            [sys.executable, "-m", "desktop", "--preview"],
+            capture_output=True,
+            text=True,
+            cwd=os.path.join(os.path.dirname(__file__), ".."),
+            env=env,
+        )
+        assert result.returncode == 0
+
+
+class TestPreviewReceiptEdgeCases:
+    def test_medium_priority_marker(self):
+        todos = [{"title": "Medium task", "done": False, "priority": "medium"}]
+        result = preview_receipt("Today", todos, [], "H", "F")
+        assert "!  " in result
+
+    def test_no_priority_no_marker(self):
+        todos = [{"title": "Simple", "done": False, "priority": "low"}]
+        result = preview_receipt("Today", todos, [], "H", "F")
+        assert "[ ]" in result
+        assert "Simple" in result
+
+    def test_missing_event_fields(self):
+        events = [{}]
+        result = preview_receipt("Today", [], events, "H", "F")
+        assert "Untitled" in result
+
+    def test_missing_todo_fields(self):
+        todos = [{}]
+        result = preview_receipt("Today", todos, [], "H", "F")
+        assert "Untitled" in result
