@@ -1,28 +1,40 @@
 # list-a-day 🖨️
 
-A MicroPython client for ESP32 that prints daily todo lists and calendar items on a thermal receipt printer over LAN.
+A thermal receipt printer client that prints daily todo lists and calendar items — runs on **ESP32 (MicroPython)** or **your desktop (Python 3.10+)**.
 
 ## Overview
 
-**list-a-day** connects an ESP32 microcontroller to a Nucoun VCP-8370 thermal receipt printer via your local network. The ESP32 fetches todo lists and calendar data from a server API, formats them as styled receipts, and prints them — giving you a tangible daily agenda.
+**list-a-day** connects to a Nucoun VCP-8370 thermal receipt printer via your local network. It fetches todo lists and calendar data, formats them as styled receipts, and prints them — giving you a tangible daily agenda.
 
 ## Architecture
 
 ```
-[Server]  --WiFi/HTTP-->  [ESP32]  --TCP:9100-->  [VCP-8370 Printer]
-                            |                          |
-                         (WiFi)                   (Ethernet)
-                            └────── Same LAN ─────────┘
+[Server]  --HTTP-->  [ESP32 or Desktop]  --TCP:9100-->  [VCP-8370 Printer]
+                            |                                |
+                      (WiFi or LAN)                     (Ethernet)
+                            └──────── Same LAN ─────────────┘
 ```
 
-## Hardware
+## Quick Start (Desktop)
 
-- **ESP32** (any variant with WiFi)
-- **Nucoun VCP-8370** thermal receipt printer (80mm, ESC/POS, USB+LAN)
-- Ethernet cable (printer to router/switch)
-- 80mm thermal paper rolls
+No hardware needed beyond the printer on your network:
 
-## Quick Start
+```bash
+# Preview receipt in terminal (no printer needed)
+uv run python -m desktop --preview
+
+# Print to your printer
+uv run python -m desktop --ip 192.168.1.100
+
+# Test printer connection
+uv run python -m desktop --test --ip 192.168.1.100
+
+# Set printer IP via environment variable
+export PRINTER_IP=192.168.1.100
+uv run python -m desktop
+```
+
+## Quick Start (ESP32)
 
 1. Flash MicroPython firmware to your ESP32 — see [docs/setup.md](docs/setup.md)
 2. Configure WiFi and printer IP in `client/config.py`
@@ -30,26 +42,43 @@ A MicroPython client for ESP32 that prints daily todo lists and calendar items o
 4. Upload code to ESP32: `./tools/upload.sh`
 5. Reboot ESP32 and watch it print!
 
+## Hardware
+
+- **Nucoun VCP-8370** thermal receipt printer (80mm, ESC/POS, USB+LAN)
+- Ethernet cable (printer to router/switch)
+- 80mm thermal paper rolls
+- **ESP32** (any variant with WiFi) — only needed for standalone mode
+
 ## Project Structure
 
 ```
-client/
+desktop/                 # Desktop CLI (Python 3.10+)
+├── __init__.py          # CLI entry point with argparse
+└── __main__.py          # python -m desktop support
+
+client/                  # ESP32 MicroPython client
 ├── boot.py              # WiFi setup on boot
 ├── main.py              # Main application loop
 ├── config.py            # All configuration settings
-└── lib/
-    ├── wifi_manager.py  # WiFi connection management
+└── lib/                 # Shared libraries (used by both desktop & ESP32)
     ├── escpos.py        # ESC/POS command builder
     ├── printer.py       # TCP socket printer driver
+    ├── formatter.py     # Receipt layout formatter
     ├── api_client.py    # HTTP client for server API
-    └── formatter.py     # Receipt layout formatter
+    └── wifi_manager.py  # WiFi connection management (ESP32 only)
+
+tests/                   # Test suite (151 tests)
 ```
 
-## Tech Stack
+## Development
 
-- **MicroPython** on ESP32
-- **ESC/POS** protocol over TCP (port 9100)
-- **HTTP** for server communication
+```bash
+# Install dependencies
+uv sync
+
+# Run tests
+uv run pytest tests/ -v
+```
 
 ## License
 

@@ -1,6 +1,9 @@
 """HTTP API client for fetching todos and calendar data from the server."""
 
-import ujson
+try:
+    import ujson as json
+except ImportError:
+    import json
 
 
 # Mock data for testing when server is not available
@@ -36,7 +39,7 @@ class APIClient:
             print(f"[API] GET {url}")
             response = urequests.get(url, timeout=self.timeout)
             if response.status_code == 200:
-                data = ujson.loads(response.text)
+                data = json.loads(response.text)
                 response.close()
                 return data
             else:
